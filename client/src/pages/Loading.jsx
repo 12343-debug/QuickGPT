@@ -11,6 +11,7 @@ const Loading = () => {
   useEffect(()=>{
     const timeout = setTimeout(()=>{
       fetchUser()
+      // navigation
       navigate('/')
     },8000)
     return ()=> clearTimeout(timeout);

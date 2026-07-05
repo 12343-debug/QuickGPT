@@ -4,6 +4,18 @@ import User from "../models/User.js"
 import imagekit from "../configs/imageKit.js"
 import openai from '../configs/openai.js'
 
+const getProviderErrorMessage = (error) => {
+    if (error?.status === 429) {
+        return "The AI provider rejected the request with a 429 error. Your Gemini API key may be rate-limited, out of quota, or missing billing."
+    }
+
+    if (error?.status === 401 || error?.status === 403) {
+        return "The AI provider rejected your API key. Check that GEMINI_API_KEY is valid and active."
+    }
+
+    return error.message
+}
+
 
 // Text-based AI Chat Message Controller
 export const textMessageController = async (req, res) => {
@@ -18,10 +30,14 @@ export const textMessageController = async (req, res) => {
         const {chatId, prompt} = req.body
 
         const chat = await Chat.findOne({userId, _id: chatId})
+        if (!chat) {
+            return res.json({ success: false, message: "Chat not found" })
+        }
+
         chat.messages.push({role: "user", content: prompt, timestamp: Date.now(), isImage: false})
 
         const { choices } = await openai.chat.completions.create({
-        model: "gemini-2.0-flash",
+        model: "llama-3.3-70b-versatile",
         messages: [
             {
                 role: "user",
@@ -38,7 +54,8 @@ export const textMessageController = async (req, res) => {
     await User.updateOne({_id: userId}, {$inc: {credits: -1}})
 
     } catch (error) {
-        res.json({success: false, message: error.message})
+        console.error("Text message failed:", error)
+        res.json({success: false, message: getProviderErrorMessage(error)})
     }
 }
 
@@ -53,6 +70,9 @@ export const imageMessageController = async (req, res) => {
         const {prompt, chatId, isPublished} = req.body
         // Find chat
         const chat = await Chat.findOne({userId, _id: chatId})
+        if (!chat) {
+            return res.json({ success: false, message: "Chat not found" })
+        }
 
          // Push user message
          chat.messages.push({
@@ -96,6 +116,7 @@ export const imageMessageController = async (req, res) => {
           await User.updateOne({_id: userId}, {$inc: {credits: -2}})
 
     } catch (error) {
-        res.json({ success: false, message: error.message });
+        console.error("Image message failed:", error)
+        res.json({ success: false, message: getProviderErrorMessage(error) });
     }
 }

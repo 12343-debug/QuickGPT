@@ -21,12 +21,14 @@ const ChatBox = () => {
     try {
       e.preventDefault() 
       if(!user) return toast('Login to send message')
+      if(!selectedChat?._id) return toast.error('Chat is still loading. Please try again in a moment.')
         setLoading(true)
         const promptCopy = prompt
         setPrompt('')
         setMessages(prev => [...prev, {role: 'user', content: prompt, timestamp: Date.now(), isImage: false }])
 
-        const {data} = await axios.post(`/api/message/${mode}`, {chatId: selectedChat._id, prompt, isPublished}, {headers: { Authorization: token }})
+        const {data} = await axios.post(`/api/message/${mode}`, 
+          {chatId: selectedChat._id, prompt, isPublished}, {headers: { Authorization: token }})
 
         if(data.success){
           setMessages(prev => [...prev, data.reply])
@@ -39,9 +41,14 @@ const ChatBox = () => {
         }else{
           toast.error(data.message)
           setPrompt(promptCopy)
+          setMessages(prev => prev.slice(0, -1))
         }
     } catch (error) {
-      toast.error(error.message)
+      toast.error(error.response?.data?.message || error.message)
+
+      // setMessages(prev => prev.slice(0, -1))
+      // setPrompt(prev => prev || prompt)
+
     }finally{
       setPrompt('')
       setLoading(false)

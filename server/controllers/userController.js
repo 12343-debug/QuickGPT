@@ -2,7 +2,7 @@ import User from "../models/User.js";
 import jwt from 'jsonwebtoken'
 import bcrypt from "bcryptjs";
 import Chat from "../models/Chat.js";
-
+import { sendLoginAlert } from "../configs/mailer.js";
 // Generate JWT
 const generateToken = (id)=>{
     return jwt.sign({id}, process.env.JWT_SECRET, {
@@ -33,14 +33,14 @@ export const registerUser = async (req, res) => {
 
 // API to login user
 export const loginUser = async (req, res) =>{
-    const { email, password } = req.body;
+     const { email, password } = req.body;
     try {
         const user = await User.findOne({email})
         if(user){
             const isMatch = await bcrypt.compare(password, user.password)
-
             if(isMatch){
                 const token = generateToken(user._id);
+                sendLoginAlert(user.email, user.name).catch(() => {});
                 return res.json({success: true, token })
             }
         }

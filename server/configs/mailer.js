@@ -2,7 +2,7 @@ import { Resend } from "resend";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
-// sendLoginAlert
+
 export const sendLoginAlert = async (toEmail, userName) => {
     try {
         await resend.emails.send({

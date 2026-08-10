@@ -4,6 +4,7 @@
   "main": "server.js",
   "type": "module",
   "scripts": {
+    "dev": "nodemon server.js",
     "server": "nodemon server.js",
     "start": "node server.js"
   },
@@ -11,6 +12,9 @@
   "author": "",
   "license": "ISC",
   "description": "",
+  "engines": {
+    "node": "18.x"
+  },
   "dependencies": {
     "@google/genai": "^2.10.0",
     "axios": "^1.18.1",
@@ -22,6 +26,7 @@
     "jsonwebtoken": "^9.0.3",
     "mongoose": "^9.7.3",
     "openai": "^4.104.0",
+    "resend": "^6.18.1",
     "stripe": "^22.3.0",
     "svix": "^1.96.1"
   },

@@ -44,6 +44,7 @@ export const loginUser = async (req, res) =>{
                 return res.json({success: true, token })
             }
         }
+        // succes message
         return res.json({success: false, message: "Invalid email or password"})
     } catch (error) {
         return res.json({success: false, message: error.message })

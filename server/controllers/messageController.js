@@ -1,3 +1,94 @@
+import axios from "axios";
+import Chat from "../models/Chat.js";
+import User from "../models/User.js";
+import imagekit from "../configs/imageKit.js";
+import openai from "../configs/openai.js";
+
+
+// ===============================
+// Text Message Controller
+// ===============================
+export const textMessageController = async (req, res) => {
+    try {
+        const userId = req.user._id;
+
+        // Check credits
+        if (req.user.credits < 1) {
+            return res.json({
+                success: false,
+                message: "You don't have enough credits to use this feature"
+            });
+        }
+
+        const { chatId, prompt } = req.body;
+
+        // Find chat
+        const chat = await Chat.findOne({
+            userId,
+            _id: chatId
+        });
+
+        if (!chat) {
+            return res.json({
+                success: false,
+                message: "Chat not found"
+            });
+        }
+
+        // Push user message
+        chat.messages.push({
+            role: "user",
+            content: prompt,
+            timestamp: Date.now(),
+            isImage: false
+        });
+
+        // Generate AI response
+        const { choices } = await openai.chat.completions.create({
+            model: "openai/gpt-oss-120b",
+            messages: [
+                {
+                    role: "user",
+                    content: prompt
+                }
+            ]
+        });
+
+        const reply = {
+            ...choices[0].message,
+            timestamp: Date.now(),
+            isImage: false
+        };
+
+        // Save assistant response
+        chat.messages.push(reply);
+        await chat.save();
+
+        // Deduct credit
+        await User.updateOne(
+            { _id: userId },
+            { $inc: { credits: -1 } }
+        );
+
+        return res.json({
+            success: true,
+            reply
+        });
+
+    } catch (error) {
+        console.error("Text message failed:", error);
+
+        return res.status(500).json({
+            success: false,
+            message: error.message || "Text generation failed"
+        });
+    }
+};
+
+
+// ===============================
+// Image Message Controller
+// ===============================
 export const imageMessageController = async (req, res) => {
     try {
         const userId = req.user._id;
@@ -54,6 +145,7 @@ export const imageMessageController = async (req, res) => {
 
         // Check ImageKit response
         if (aiImageResponse.status !== 200) {
+
             const ikError =
                 aiImageResponse.headers["ik-error"] ||
                 aiImageResponse.headers["IK-Error"] ||

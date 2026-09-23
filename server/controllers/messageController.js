@@ -3,6 +3,7 @@ import Chat from "../models/Chat.js";
 import User from "../models/User.js";
 import imagekit from "../configs/imageKit.js";
 import openai from "../configs/openai.js";
+import openaiImage from "../configs/openaiImage.js";
 
 
 // ===============================
@@ -116,7 +117,7 @@ export const imageMessageController = async (req, res) => {
             });
         }
 
-        // Push user message
+        // Save user message
         chat.messages.push({
             role: "user",
             content: prompt,
@@ -124,54 +125,31 @@ export const imageMessageController = async (req, res) => {
             isImage: false
         });
 
-        // Encode prompt
-        const encodedPrompt = encodeURIComponent(prompt);
+        console.log("Generating image with OpenAI...");
 
-        // ImageKit AI generation URL
-        const generatedImageUrl =
-            `${process.env.IMAGEKIT_URL_ENDPOINT}/ik-genimg-prompt-${encodedPrompt}/quickgpt/${Date.now()}.png?tr=w-800,h-800`;
-
-        console.log("ImageKit URL:", generatedImageUrl);
-
-        // Generate image
-        const aiImageResponse = await axios.get(generatedImageUrl, {
-            responseType: "arraybuffer",
-            timeout: 120000,
-            validateStatus: () => true
+        // Generate image using OpenAI
+        const result = await openaiImage.images.generate({
+            model: "gpt-image-2",
+            prompt: prompt,
+            size: "1024x1024"
         });
 
-        console.log("ImageKit status:", aiImageResponse.status);
-        console.log("ImageKit headers:", aiImageResponse.headers);
+        console.log("OpenAI image generated successfully");
 
-        // Check ImageKit response
-        if (aiImageResponse.status !== 200) {
+        const imageBase64 = result.data?.[0]?.b64_json;
 
-            const ikError =
-                aiImageResponse.headers["ik-error"] ||
-                aiImageResponse.headers["IK-Error"] ||
-                `ImageKit returned status ${aiImageResponse.status}`;
-
-            console.error("IMAGEKIT ERROR:", ikError);
-
-            return res.status(aiImageResponse.status).json({
-                success: false,
-                message: ikError
-            });
+        if (!imageBase64) {
+            throw new Error("OpenAI did not return image data");
         }
 
-        // Convert image to Base64
-        const base64Image =
-            `data:image/png;base64,${Buffer.from(
-                aiImageResponse.data,
-                "binary"
-            ).toString("base64")}`;
-
-        // Upload to ImageKit Media Library
+        // Upload generated image to ImageKit
         const uploadResponse = await imagekit.upload({
-            file: base64Image,
+            file: imageBase64,
             fileName: `${Date.now()}.png`,
             folder: "quickgpt"
         });
+
+        console.log("Image uploaded to ImageKit");
 
         const reply = {
             role: "assistant",
@@ -181,7 +159,7 @@ export const imageMessageController = async (req, res) => {
             isPublished
         };
 
-        // Save chat
+        // Save assistant message
         chat.messages.push(reply);
         await chat.save();
 
@@ -198,23 +176,15 @@ export const imageMessageController = async (req, res) => {
 
     } catch (error) {
 
-        console.error("========== IMAGE GENERATION ERROR ==========");
+        console.error("========== OPENAI IMAGE ERROR ==========");
         console.error("Message:", error.message);
-        console.error("Status:", error.response?.status);
-        console.error("Data:", error.response?.data);
-        console.error("Headers:", error.response?.headers);
-        console.error("============================================");
+        console.error("Status:", error.status);
+        console.error("Response:", error.response?.data);
+        console.error("========================================");
 
-        const message =
-            error.response?.headers?.["ik-error"] ||
-            error.response?.data?.message ||
-            error.response?.data?.error ||
-            error.message ||
-            "Image generation failed";
-
-        return res.status(error.response?.status || 500).json({
+        return res.status(error.status || 500).json({
             success: false,
-            message
+            message: error.message || "Image generation failed"
         });
     }
 };

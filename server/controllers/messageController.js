@@ -139,24 +139,22 @@ export const imageMessageController = async (req, res) => {
 
 const imageBlob = await hf.textToImage({
     model: "black-forest-labs/FLUX.1-schnell",
-    inputs: prompt,
+    inputs: prompt
 });
 
 console.log("Hugging Face image generated successfully");
 
-// Convert Blob to Buffer
 const imageBuffer = Buffer.from(
     await imageBlob.arrayBuffer()
 );
 
-// Upload to ImageKit
 const uploadResponse = await imagekit.upload({
     file: imageBuffer,
     fileName: `${Date.now()}.png`,
     folder: "quickgpt"
 });
 
-    console.log("Image uploaded to ImageKit");
+console.log("Image uploaded to ImageKit");
 
     const reply = {
       role: "assistant",

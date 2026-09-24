@@ -135,16 +135,26 @@ export const imageMessageController = async (req, res) => {
       },
     );
 
-    console.log("Hugging Face status:", response.status);
+    console.log("Generating image with Hugging Face...");
 
-    const imageBase64 = `data:image/png;base64,${Buffer.from(response.data).toString("base64")}`;
+const imageBlob = await hf.textToImage({
+    model: "black-forest-labs/FLUX.1-schnell",
+    inputs: prompt,
+});
 
-    // Upload generated image to ImageKit
-    const uploadResponse = await imagekit.upload({
-      file: imageBase64,
-      fileName: `${Date.now()}.png`,
-      folder: "quickgpt",
-    });
+console.log("Hugging Face image generated successfully");
+
+// Convert Blob to Buffer
+const imageBuffer = Buffer.from(
+    await imageBlob.arrayBuffer()
+);
+
+// Upload to ImageKit
+const uploadResponse = await imagekit.upload({
+    file: imageBuffer,
+    fileName: `${Date.now()}.png`,
+    folder: "quickgpt"
+});
 
     console.log("Image uploaded to ImageKit");
 

@@ -3,6 +3,7 @@ import User from "../models/User.js";
 import imagekit from "../configs/imageKit.js";
 import openai from "../configs/openai.js";
 import hf from "../configs/huggingface.js";
+import axios from "axios";
 
 // ===============================
 // Text Message Controller

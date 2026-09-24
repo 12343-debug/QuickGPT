@@ -1,8 +1,8 @@
-import axios from "axios";
 import Chat from "../models/Chat.js";
 import User from "../models/User.js";
 import imagekit from "../configs/imageKit.js";
 import openai from "../configs/openai.js";
+import hf from "../configs/huggingface.js";
 
 // ===============================
 // Text Message Controller
@@ -80,9 +80,6 @@ export const textMessageController = async (req, res) => {
   }
 };
 
-// ===============================
-// Image Message Controller
-// ===============================
 export const imageMessageController = async (req, res) => {
   try {
     const userId = req.user._id;
@@ -120,41 +117,27 @@ export const imageMessageController = async (req, res) => {
 
     console.log("Generating image with Hugging Face...");
 
-    const response = await axios.post(
-      "https://router.huggingface.co/hf-inference/models/black-forest-labs/FLUX.1-schnell",
-      {
-        inputs: prompt,
-      },
-      {
-        headers: {
-          Authorization: `Bearer ${process.env.HF_TOKEN}`,
-          "Content-Type": "application/json",
-        },
-        responseType: "arraybuffer",
-        timeout: 120000,
-      },
+    // Generate image using Hugging Face
+    const imageBlob = await hf.textToImage({
+      model: "black-forest-labs/FLUX.1-schnell",
+      inputs: prompt,
+    });
+
+    console.log("Hugging Face image generated successfully");
+
+    // Convert Blob to Buffer
+    const imageBuffer = Buffer.from(
+      await imageBlob.arrayBuffer()
     );
 
-    console.log("Generating image with Hugging Face...");
+    // Upload image to ImageKit
+    const uploadResponse = await imagekit.upload({
+      file: imageBuffer,
+      fileName: `${Date.now()}.png`,
+      folder: "quickgpt",
+    });
 
-const imageBlob = await hf.textToImage({
-    model: "black-forest-labs/FLUX.1-schnell",
-    inputs: prompt
-});
-
-console.log("Hugging Face image generated successfully");
-
-const imageBuffer = Buffer.from(
-    await imageBlob.arrayBuffer()
-);
-
-const uploadResponse = await imagekit.upload({
-    file: imageBuffer,
-    fileName: `${Date.now()}.png`,
-    folder: "quickgpt"
-});
-
-console.log("Image uploaded to ImageKit");
+    console.log("Image uploaded to ImageKit");
 
     const reply = {
       role: "assistant",
@@ -169,18 +152,22 @@ console.log("Image uploaded to ImageKit");
     await chat.save();
 
     // Deduct credits
-    await User.updateOne({ _id: userId }, { $inc: { credits: -2 } });
+    await User.updateOne(
+      { _id: userId },
+      { $inc: { credits: -2 } }
+    );
 
     return res.json({
       success: true,
       reply,
     });
+
   } catch (error) {
-    console.error("========== OPENAI IMAGE ERROR ==========");
+    console.error("========== HUGGING FACE IMAGE ERROR ==========");
     console.error("Message:", error.message);
     console.error("Status:", error.status);
     console.error("Response:", error.response?.data);
-    console.error("========================================");
+    console.error("==============================================");
 
     return res.status(error.status || 500).json({
       success: false,

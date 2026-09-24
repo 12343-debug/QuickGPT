@@ -132,11 +132,15 @@ export const imageMessageController = async (req, res) => {
     );
 
     // Upload image to ImageKit
-    const uploadResponse = await imagekit.upload({
-      file: imageBuffer,
-      fileName: `${Date.now()}.png`,
-      folder: "quickgpt",
-    });
+  console.log("Uploading generated image to ImageKit...");
+
+const uploadResponse = await imagekit.upload({
+  file: imageBuffer,
+  fileName: `${Date.now()}.png`,
+  folder: "quickgpt",
+});
+
+console.log("ImageKit upload successful:", uploadResponse.url);
 
     console.log("Image uploaded to ImageKit");
 
@@ -163,17 +167,18 @@ export const imageMessageController = async (req, res) => {
       reply,
     });
 
-  }  catch (error) {
-  console.error("========== HUGGING FACE IMAGE ERROR ==========");
-  console.error("Message:", error.message);
-  console.error("Status:", error.status);
-  console.error("Cause:", error.cause);
-  console.error("Response:", error.response);
-  console.error("==============================================");
+  }   catch (error) {
+  console.error("========== IMAGE ERROR ==========");
+  console.error("Error object:", error);
+  console.error("Message:", error?.message);
+  console.error("Response:", error?.response);
+  console.error("Status:", error?.status);
+  console.error("Stack:", error?.stack);
+  console.error("================================");
 
-  return res.status(error.status || 500).json({
+  return res.status(500).json({
     success: false,
-    message: error.message || "Image generation failed",
+    message: error?.message || "Image upload/generation failed",
   });
-  }
+}
 };

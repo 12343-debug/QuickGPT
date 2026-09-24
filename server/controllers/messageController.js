@@ -118,32 +118,36 @@ export const imageMessageController = async (req, res) => {
     console.log("Generating image with Hugging Face...");
 
     // Generate image using Hugging Face
-   const imageBlob = await hf.textToImage({
-  provider: "nscale",
-  model: "black-forest-labs/FLUX.1-schnell",
-  inputs: prompt,
-});
+    const imageBlob = await hf.textToImage({
+      provider: "nscale",
+      model: "black-forest-labs/FLUX.1-schnell",
+      inputs: prompt,
+    });
 
-    console.log("Hugging Face image generated successfully");
+    console.log("HF image generated successfully");
 
     // Convert Blob to Buffer
     const imageBuffer = Buffer.from(
       await imageBlob.arrayBuffer()
     );
 
+    console.log("Image buffer size:", imageBuffer.length);
+
     // Upload image to ImageKit
-  console.log("Uploading generated image to ImageKit...");
+    console.log("Starting ImageKit upload...");
 
-const uploadResponse = await imagekit.upload({
-  file: imageBuffer,
-  fileName: `${Date.now()}.png`,
-  folder: "quickgpt",
-});
+    const uploadResponse = await imagekit.upload({
+      file: imageBuffer,
+      fileName: `${Date.now()}.png`,
+      folder: "quickgpt",
+    });
 
-console.log("ImageKit upload successful:", uploadResponse.url);
+    console.log(
+      "ImageKit upload successful:",
+      uploadResponse.url
+    );
 
-    console.log("Image uploaded to ImageKit");
-
+    // Create assistant reply
     const reply = {
       role: "assistant",
       content: uploadResponse.url,
@@ -154,31 +158,41 @@ console.log("ImageKit upload successful:", uploadResponse.url);
 
     // Save assistant message
     chat.messages.push(reply);
+
+    console.log("Saving chat...");
+
     await chat.save();
 
+    console.log("Chat saved successfully");
+
     // Deduct credits
+    console.log("Deducting credits...");
+
     await User.updateOne(
       { _id: userId },
       { $inc: { credits: -2 } }
     );
+
+    console.log("Credits deducted");
 
     return res.json({
       success: true,
       reply,
     });
 
-  }   catch (error) {
-  console.error("========== IMAGE ERROR ==========");
-  console.error("Error object:", error);
-  console.error("Message:", error?.message);
-  console.error("Response:", error?.response);
-  console.error("Status:", error?.status);
-  console.error("Stack:", error?.stack);
-  console.error("================================");
+  } catch (error) {
+    console.error("========== IMAGE ERROR ==========");
+    console.error("FULL ERROR:", error);
+    console.error("NAME:", error?.name);
+    console.error("MESSAGE:", error?.message);
+    console.error("STATUS:", error?.status);
+    console.error("RESPONSE:", error?.response);
+    console.error("STACK:", error?.stack);
+    console.error("================================");
 
-  return res.status(500).json({
-    success: false,
-    message: error?.message || "Image upload/generation failed",
-  });
-}
+    return res.status(error?.status || 500).json({
+      success: false,
+      message: error?.message || "Image generation failed",
+    });
+  }
 };

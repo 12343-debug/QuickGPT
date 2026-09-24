@@ -80,8 +80,19 @@ export const textMessageController = async (req, res) => {
 // ===============================
 // Image Message Controller
 // ===============================
+const withTimeout = (promise, ms, label) =>
+  Promise.race([
+    promise,
+    new Promise((_, reject) =>
+      setTimeout(() => reject(new Error(`${label} timed out after ${ms / 1000}s`)), ms)
+    ),
+  ]);
+
 export const imageMessageController = async (req, res) => {
+  const t0 = Date.now();
+  const step = (msg) => console.log(`[image v2] +${Date.now() - t0}ms ${msg}`);
   try {
+    step("request received");
     const userId = req.user._id;
 
     if (req.user.credits < 2) {
@@ -105,14 +116,21 @@ export const imageMessageController = async (req, res) => {
 
     // 1) Generate image with Hugging Face (multi-provider fallback)
     const { buffer, contentType } = await generateImage(prompt.trim());
+    step(`HF done, ${buffer.length} bytes`);
     const ext = contentType.includes("jpeg") ? "jpg" : "png";
 
     // 2) Upload to ImageKit
-    const uploadResponse = await imagekit.upload({
-      file: buffer.toString("base64"),
-      fileName: `${Date.now()}.${ext}`,
-      folder: "quickgpt",
-    });
+    step("uploading to ImageKit");
+    const uploadResponse = await withTimeout(
+      imagekit.upload({
+        file: buffer.toString("base64"),
+        fileName: `${Date.now()}.${ext}`,
+        folder: "quickgpt",
+      }),
+      20000,
+      "ImageKit upload"
+    );
+    step(`ImageKit done: ${uploadResponse.url}`);
 
     // 3) Save both messages together only after everything succeeded
     chat.messages.push({
@@ -131,12 +149,14 @@ export const imageMessageController = async (req, res) => {
     };
     chat.messages.push(reply);
     await chat.save();
+    step("chat saved");
 
     // 4) Deduct credits
     await User.updateOne({ _id: userId }, { $inc: { credits: -2 } });
 
     return res.json({ success: true, reply });
   } catch (error) {
+    step(`FAILED: ${error?.message}`);
     console.error("IMAGE ERROR:", error?.message, error?.response?.data || "");
 
     // Always 200 + success:false so the frontend shows the message in a toast

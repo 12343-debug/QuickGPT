@@ -136,11 +136,38 @@ export const imageMessageController = async (req, res) => {
     // Upload image to ImageKit
     console.log("Starting ImageKit upload...");
 
-    const uploadResponse = await imagekit.upload({
-      file: imageBuffer,
-      fileName: `${Date.now()}.png`,
-      folder: "quickgpt",
-    });
+    const FormData = (await import("form-data")).default;
+
+const form = new FormData();
+
+form.append("file", imageBuffer, {
+  filename: `${Date.now()}.png`,
+  contentType: "image/png",
+});
+
+form.append("fileName", `${Date.now()}.png`);
+form.append("folder", "quickgpt");
+
+const auth = Buffer.from(
+  `${process.env.IMAGEKIT_PRIVATE_KEY}:`
+).toString("base64");
+
+const uploadResult = await axios.post(
+  "https://upload.imagekit.io/api/v1/files/upload",
+  form,
+  {
+    headers: {
+      ...form.getHeaders(),
+      Authorization: `Basic ${auth}`,
+    },
+    maxContentLength: Infinity,
+    maxBodyLength: Infinity,
+  }
+);
+
+const uploadResponse = uploadResult.data;
+
+console.log("ImageKit upload successful:", uploadResponse.url);
 
     console.log(
       "ImageKit upload successful:",

@@ -1,6 +1,5 @@
 import Chat from "../models/Chat.js";
 import User from "../models/User.js";
-import imagekit from "../configs/imageKit.js";
 import openai from "../configs/openai.js";
 import hf from "../configs/huggingface.js";
 import axios from "axios";
@@ -12,7 +11,6 @@ export const textMessageController = async (req, res) => {
   try {
     const userId = req.user._id;
 
-    // Check credits
     if (req.user.credits < 1) {
       return res.json({
         success: false,
@@ -22,7 +20,6 @@ export const textMessageController = async (req, res) => {
 
     const { chatId, prompt } = req.body;
 
-    // Find chat
     const chat = await Chat.findOne({
       userId,
       _id: chatId,
@@ -35,7 +32,6 @@ export const textMessageController = async (req, res) => {
       });
     }
 
-    // Push user message
     chat.messages.push({
       role: "user",
       content: prompt,
@@ -43,7 +39,6 @@ export const textMessageController = async (req, res) => {
       isImage: false,
     });
 
-    // Generate AI response
     const { choices } = await openai.chat.completions.create({
       model: "openai/gpt-oss-120b",
       messages: [
@@ -60,12 +55,13 @@ export const textMessageController = async (req, res) => {
       isImage: false,
     };
 
-    // Save assistant response
     chat.messages.push(reply);
     await chat.save();
 
-    // Deduct credit
-    await User.updateOne({ _id: userId }, { $inc: { credits: -1 } });
+    await User.updateOne(
+      { _id: userId },
+      { $inc: { credits: -1 } }
+    );
 
     return res.json({
       success: true,
@@ -81,11 +77,13 @@ export const textMessageController = async (req, res) => {
   }
 };
 
+// ===============================
+// Image Message Controller
+// ===============================
 export const imageMessageController = async (req, res) => {
   try {
     const userId = req.user._id;
 
-    // Check credits
     if (req.user.credits < 2) {
       return res.json({
         success: false,
@@ -95,7 +93,6 @@ export const imageMessageController = async (req, res) => {
 
     const { prompt, chatId, isPublished } = req.body;
 
-    // Find chat
     const chat = await Chat.findOne({
       userId,
       _id: chatId,
@@ -118,7 +115,7 @@ export const imageMessageController = async (req, res) => {
 
     console.log("Generating image with Hugging Face...");
 
-    // Generate image using Hugging Face
+    // Generate image
     const imageBlob = await hf.textToImage({
       provider: "nscale",
       model: "black-forest-labs/FLUX.1-schnell",
@@ -134,48 +131,67 @@ export const imageMessageController = async (req, res) => {
 
     console.log("Image buffer size:", imageBuffer.length);
 
-    // Upload image to ImageKit
+    // ===============================
+    // Upload to ImageKit
+    // ===============================
     console.log("Starting ImageKit upload...");
+
+    console.log(
+      "ImageKit private key exists:",
+      !!process.env.IMAGEKIT_PRIVATE_KEY
+    );
+
+    console.log(
+      "ImageKit public key exists:",
+      !!process.env.IMAGEKIT_PUBLIC_KEY
+    );
+
+    console.log(
+      "ImageKit endpoint exists:",
+      !!process.env.IMAGEKIT_URL_ENDPOINT
+    );
 
     const FormData = (await import("form-data")).default;
 
-const form = new FormData();
+    const form = new FormData();
 
-form.append("file", imageBuffer, {
-  filename: `${Date.now()}.png`,
-  contentType: "image/png",
-});
+    const fileName = `${Date.now()}.png`;
 
-form.append("fileName", `${Date.now()}.png`);
-form.append("folder", "quickgpt");
+    form.append("file", imageBuffer, {
+      filename: fileName,
+      contentType: "image/png",
+    });
 
-const auth = Buffer.from(
-  `${process.env.IMAGEKIT_PRIVATE_KEY}:`
-).toString("base64");
+    form.append("fileName", fileName);
+    form.append("folder", "quickgpt");
 
-const uploadResult = await axios.post(
-  "https://upload.imagekit.io/api/v1/files/upload",
-  form,
-  {
-    headers: {
-      ...form.getHeaders(),
-      Authorization: `Basic ${auth}`,
-    },
-    maxContentLength: Infinity,
-    maxBodyLength: Infinity,
-  }
-);
+    const auth = Buffer.from(
+      `${process.env.IMAGEKIT_PRIVATE_KEY}:`
+    ).toString("base64");
 
-const uploadResponse = uploadResult.data;
+    const uploadResult = await axios.post(
+      "https://upload.imagekit.io/api/v1/files/upload",
+      form,
+      {
+        headers: {
+          ...form.getHeaders(),
+          Authorization: `Basic ${auth}`,
+        },
+        maxContentLength: Infinity,
+        maxBodyLength: Infinity,
+      }
+    );
 
-console.log("ImageKit upload successful:", uploadResponse.url);
+    const uploadResponse = uploadResult.data;
 
     console.log(
       "ImageKit upload successful:",
       uploadResponse.url
     );
 
+    // ===============================
     // Create assistant reply
+    // ===============================
     const reply = {
       role: "assistant",
       content: uploadResponse.url,
@@ -184,7 +200,6 @@ console.log("ImageKit upload successful:", uploadResponse.url);
       isPublished,
     };
 
-    // Save assistant message
     chat.messages.push(reply);
 
     console.log("Saving chat...");
@@ -193,7 +208,9 @@ console.log("ImageKit upload successful:", uploadResponse.url);
 
     console.log("Chat saved successfully");
 
+    // ===============================
     // Deduct credits
+    // ===============================
     console.log("Deducting credits...");
 
     await User.updateOne(
@@ -210,17 +227,31 @@ console.log("ImageKit upload successful:", uploadResponse.url);
 
   } catch (error) {
     console.error("========== IMAGE ERROR ==========");
+
     console.error("FULL ERROR:", error);
     console.error("NAME:", error?.name);
     console.error("MESSAGE:", error?.message);
     console.error("STATUS:", error?.status);
-    console.error("RESPONSE:", error?.response);
+    console.error(
+      "RESPONSE STATUS:",
+      error?.response?.status
+    );
+    console.error(
+      "RESPONSE DATA:",
+      error?.response?.data
+    );
     console.error("STACK:", error?.stack);
+
     console.error("================================");
 
-    return res.status(error?.status || 500).json({
+    return res.status(
+      error?.response?.status || error?.status || 500
+    ).json({
       success: false,
-      message: error?.message || "Image generation failed",
+      message:
+        error?.response?.data?.message ||
+        error?.message ||
+        "Image generation failed",
     });
   }
 };

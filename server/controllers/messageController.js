@@ -1,8 +1,8 @@
 import Chat from "../models/Chat.js";
 import User from "../models/User.js";
 import openai from "../configs/openai.js";
-import hf from "../configs/huggingface.js";
-import axios from "axios";
+import { generateImage } from "../utils/generateImage.js";
+import imagekit from "../configs/imageKit.js";
 
 // ===============================
 // Text Message Controller
@@ -93,19 +93,28 @@ export const imageMessageController = async (req, res) => {
 
     const { prompt, chatId, isPublished } = req.body;
 
-    const chat = await Chat.findOne({
-      userId,
-      _id: chatId,
-    });
-
-    if (!chat) {
-      return res.json({
-        success: false,
-        message: "Chat not found",
-      });
+    if (!prompt || !prompt.trim()) {
+      return res.json({ success: false, message: "Prompt is required" });
     }
 
-    // Save user message
+    const chat = await Chat.findOne({ userId, _id: chatId });
+
+    if (!chat) {
+      return res.json({ success: false, message: "Chat not found" });
+    }
+
+    // 1) Generate image with Hugging Face (multi-provider fallback)
+    const { buffer, contentType } = await generateImage(prompt.trim());
+    const ext = contentType.includes("jpeg") ? "jpg" : "png";
+
+    // 2) Upload to ImageKit
+    const uploadResponse = await imagekit.upload({
+      file: buffer.toString("base64"),
+      fileName: `${Date.now()}.${ext}`,
+      folder: "quickgpt",
+    });
+
+    // 3) Save both messages together only after everything succeeded
     chat.messages.push({
       role: "user",
       content: prompt,
@@ -113,140 +122,25 @@ export const imageMessageController = async (req, res) => {
       isImage: false,
     });
 
-    console.log("Generating image with Hugging Face...");
-
-    // Generate image
-    const imageBlob = await hf.textToImage({
-      provider: "nscale",
-      model: "black-forest-labs/FLUX.1-schnell",
-      inputs: prompt,
-    });
-
-    console.log("HF image generated successfully");
-
-    // Convert Blob to Buffer
-    const imageBuffer = Buffer.from(
-      await imageBlob.arrayBuffer()
-    );
-
-    console.log("Image buffer size:", imageBuffer.length);
-
-    // ===============================
-    // Upload to ImageKit
-    // ===============================
-    console.log("Starting ImageKit upload...");
-
-    console.log(
-      "ImageKit private key exists:",
-      !!process.env.IMAGEKIT_PRIVATE_KEY
-    );
-
-    console.log(
-      "ImageKit public key exists:",
-      !!process.env.IMAGEKIT_PUBLIC_KEY
-    );
-
-    console.log(
-      "ImageKit endpoint exists:",
-      !!process.env.IMAGEKIT_URL_ENDPOINT
-    );
-
-    const FormData = (await import("form-data")).default;
-
-    const form = new FormData();
-
-    const fileName = `${Date.now()}.png`;
-
-    form.append("file", imageBuffer, {
-      filename: fileName,
-      contentType: "image/png",
-    });
-
-    form.append("fileName", fileName);
-    form.append("folder", "quickgpt");
-
-    const auth = Buffer.from(
-      `${process.env.IMAGEKIT_PRIVATE_KEY}:`
-    ).toString("base64");
-
-    const uploadResult = await axios.post(
-      "https://upload.imagekit.io/api/v1/files/upload",
-      form,
-      {
-        headers: {
-          ...form.getHeaders(),
-          Authorization: `Basic ${auth}`,
-        },
-        maxContentLength: Infinity,
-        maxBodyLength: Infinity,
-      }
-    );
-
-    const uploadResponse = uploadResult.data;
-
-    console.log(
-      "ImageKit upload successful:",
-      uploadResponse.url
-    );
-
-    // ===============================
-    // Create assistant reply
-    // ===============================
     const reply = {
       role: "assistant",
       content: uploadResponse.url,
       timestamp: Date.now(),
       isImage: true,
-      isPublished,
+      isPublished: !!isPublished,
     };
-
     chat.messages.push(reply);
-
-    console.log("Saving chat...");
-
     await chat.save();
 
-    console.log("Chat saved successfully");
+    // 4) Deduct credits
+    await User.updateOne({ _id: userId }, { $inc: { credits: -2 } });
 
-    // ===============================
-    // Deduct credits
-    // ===============================
-    console.log("Deducting credits...");
-
-    await User.updateOne(
-      { _id: userId },
-      { $inc: { credits: -2 } }
-    );
-
-    console.log("Credits deducted");
-
-    return res.json({
-      success: true,
-      reply,
-    });
-
+    return res.json({ success: true, reply });
   } catch (error) {
-    console.error("========== IMAGE ERROR ==========");
+    console.error("IMAGE ERROR:", error?.message, error?.response?.data || "");
 
-    console.error("FULL ERROR:", error);
-    console.error("NAME:", error?.name);
-    console.error("MESSAGE:", error?.message);
-    console.error("STATUS:", error?.status);
-    console.error(
-      "RESPONSE STATUS:",
-      error?.response?.status
-    );
-    console.error(
-      "RESPONSE DATA:",
-      error?.response?.data
-    );
-    console.error("STACK:", error?.stack);
-
-    console.error("================================");
-
-    return res.status(
-      error?.response?.status || error?.status || 500
-    ).json({
+    // Always 200 + success:false so the frontend shows the message in a toast
+    return res.json({
       success: false,
       message:
         error?.response?.data?.message ||

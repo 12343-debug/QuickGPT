@@ -118,10 +118,11 @@ export const imageMessageController = async (req, res) => {
     console.log("Generating image with Hugging Face...");
 
     // Generate image using Hugging Face
-    const imageBlob = await hf.textToImage({
-      model: "black-forest-labs/FLUX.1-schnell",
-      inputs: prompt,
-    });
+   const imageBlob = await hf.textToImage({
+  provider: "nscale",
+  model: "black-forest-labs/FLUX.1-schnell",
+  inputs: prompt,
+});
 
     console.log("Hugging Face image generated successfully");
 
@@ -162,16 +163,17 @@ export const imageMessageController = async (req, res) => {
       reply,
     });
 
-  } catch (error) {
-    console.error("========== HUGGING FACE IMAGE ERROR ==========");
-    console.error("Message:", error.message);
-    console.error("Status:", error.status);
-    console.error("Response:", error.response?.data);
-    console.error("==============================================");
+  }  catch (error) {
+  console.error("========== HUGGING FACE IMAGE ERROR ==========");
+  console.error("Message:", error.message);
+  console.error("Status:", error.status);
+  console.error("Cause:", error.cause);
+  console.error("Response:", error.response);
+  console.error("==============================================");
 
-    return res.status(error.status || 500).json({
-      success: false,
-      message: error.message || "Image generation failed",
-    });
+  return res.status(error.status || 500).json({
+    success: false,
+    message: error.message || "Image generation failed",
+  });
   }
 };

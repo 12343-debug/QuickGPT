@@ -159,13 +159,22 @@ export const imageMessageController = async (req, res) => {
     step(`FAILED: ${error?.message}`);
     console.error("IMAGE ERROR:", error?.message, error?.response?.data || "");
 
-    // Always 200 + success:false so the frontend shows the message in a toast
+    // TEMP DEBUG: full detail is sent back in the response itself so it is
+    // visible in the browser Network tab without needing Vercel log access.
+    // Remove the "debug" field once the real cause is found.
     return res.json({
       success: false,
       message:
         error?.response?.data?.message ||
         error?.message ||
         "Image generation failed",
+      debug: {
+        name: error?.name,
+        message: error?.message,
+        status: error?.status || error?.response?.status,
+        responseData: error?.response?.data,
+        stack: (error?.stack || "").split("\n").slice(0, 4),
+      },
     });
   }
 };

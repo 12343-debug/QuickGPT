@@ -10,7 +10,10 @@ export async function uploadToImageKit(buffer, fileName) {
   }
 
   const form = new FormData();
-  form.append("file", new Blob([buffer]), fileName);
+  // Sending file as a base64 string (rather than a raw Blob) matches
+  // ImageKit's own SDK behavior and avoids multipart edge cases on some
+  // serverless fetch implementations.
+  form.append("file", buffer.toString("base64"));
   form.append("fileName", fileName);
   form.append("folder", "quickgpt");
   form.append("useUniqueFileName", "true");
@@ -26,12 +29,18 @@ export async function uploadToImageKit(buffer, fileName) {
     signal: AbortSignal.timeout(20000),
   });
 
-  const data = await response.json().catch(() => null);
+  const rawText = await response.text();
+  let data = null;
+  try {
+    data = JSON.parse(rawText);
+  } catch {
+    // response wasn't JSON (e.g. an HTML error page from a gateway) - keep rawText for the error below
+  }
 
   if (!response.ok) {
     const msg =
       data?.message ||
-      `ImageKit upload failed with HTTP ${response.status} ${response.statusText}`;
+      `ImageKit upload failed with HTTP ${response.status} ${response.statusText}: ${rawText.slice(0, 300) || "(empty body)"}`;
     throw new Error(msg);
   }
 

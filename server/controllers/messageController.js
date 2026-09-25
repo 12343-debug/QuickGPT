@@ -2,7 +2,7 @@ import Chat from "../models/Chat.js";
 import User from "../models/User.js";
 import openai from "../configs/openai.js";
 import { generateImage } from "../utils/generateImage.js";
-import imagekit from "../configs/imageKit.js";
+import { uploadToImageKit } from "../utils/uploadToImageKit.js";
 
 // ===============================
 // Text Message Controller
@@ -125,26 +125,7 @@ export const imageMessageController = async (req, res) => {
 
     // 2) Upload to ImageKit
     step("uploading to ImageKit");
-    let uploadResponse;
-    try {
-      uploadResponse = await withTimeout(
-        imagekit.upload({
-          file: buffer.toString("base64"),
-          fileName: `${Date.now()}.${ext}`,
-          folder: "quickgpt",
-        }),
-        20000,
-        "ImageKit upload"
-      );
-    } catch (ikErr) {
-      // The imagekit SDK sometimes rejects with no argument at all on bad
-      // credentials, so normalize that into a real, readable error here.
-      throw new Error(
-        ikErr && (ikErr.message || ikErr.help)
-          ? ikErr.message || ikErr.help
-          : "ImageKit rejected the upload with no error details - check IMAGEKIT_PRIVATE_KEY, IMAGEKIT_PUBLIC_KEY and IMAGEKIT_URL_ENDPOINT on Vercel."
-      );
-    }
+    const uploadResponse = await uploadToImageKit(buffer, `${Date.now()}.${ext}`);
     step(`ImageKit done: ${uploadResponse.url}`);
 
     // 3) Save both messages together only after everything succeeded

@@ -2,7 +2,7 @@ import Chat from "../models/Chat.js";
 import User from "../models/User.js";
 import openai from "../configs/openai.js";
 import { generateImage } from "../utils/generateImage.js";
-import { uploadToImageKit } from "../utils/uploadToImageKit.js";
+import { uploadToCloudinary as uploadToImageKit } from "../utils/uploadToCloudinary.js";
 
 // ===============================
 // Text Message Controller

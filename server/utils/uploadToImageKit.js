@@ -50,3 +50,4 @@ export async function uploadToImageKit(buffer, fileName) {
 
   return data; // { url, fileId, ... }
 }
+

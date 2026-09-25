@@ -20,10 +20,11 @@ export async function uploadToCloudinary(buffer, fileName) {
 
   const timestamp = Math.floor(Date.now() / 1000);
   const folder = "quickgpt";
+  const publicId = fileName.replace(/\.[a-z0-9]+$/i, "");
 
-  // Only params actually sent (besides file/api_key/signature) go into the
-  // signature string, alphabetically sorted, per Cloudinary's spec.
-  const paramsToSign = `folder=${folder}&timestamp=${timestamp}${apiSecret}`;
+  // Every param sent below (except file, api_key, signature) must appear here,
+  // alphabetically sorted by key, exactly as Cloudinary expects.
+  const paramsToSign = `folder=${folder}&public_id=${publicId}&timestamp=${timestamp}${apiSecret}`;
   const signature = crypto.createHash("sha1").update(paramsToSign).digest("hex");
 
   const form = new FormData();
@@ -32,7 +33,7 @@ export async function uploadToCloudinary(buffer, fileName) {
   form.append("timestamp", String(timestamp));
   form.append("signature", signature);
   form.append("folder", folder);
-  form.append("public_id", fileName.replace(/\.[a-z0-9]+$/i, ""));
+  form.append("public_id", publicId);
 
   const response = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, {
     method: "POST",

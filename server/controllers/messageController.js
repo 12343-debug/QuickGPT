@@ -90,7 +90,11 @@ const withTimeout = (promise, ms, label) =>
 
 export const imageMessageController = async (req, res) => {
   const t0 = Date.now();
-  const step = (msg) => console.log(`[image v2] +${Date.now() - t0}ms ${msg}`);
+  let stage = "start";
+  const step = (msg) => {
+    stage = msg;
+    console.log(`[image v2] +${Date.now() - t0}ms ${msg}`);
+  };
   try {
     step("request received");
     const userId = req.user._id;
@@ -121,15 +125,26 @@ export const imageMessageController = async (req, res) => {
 
     // 2) Upload to ImageKit
     step("uploading to ImageKit");
-    const uploadResponse = await withTimeout(
-      imagekit.upload({
-        file: buffer.toString("base64"),
-        fileName: `${Date.now()}.${ext}`,
-        folder: "quickgpt",
-      }),
-      20000,
-      "ImageKit upload"
-    );
+    let uploadResponse;
+    try {
+      uploadResponse = await withTimeout(
+        imagekit.upload({
+          file: buffer.toString("base64"),
+          fileName: `${Date.now()}.${ext}`,
+          folder: "quickgpt",
+        }),
+        20000,
+        "ImageKit upload"
+      );
+    } catch (ikErr) {
+      // The imagekit SDK sometimes rejects with no argument at all on bad
+      // credentials, so normalize that into a real, readable error here.
+      throw new Error(
+        ikErr && (ikErr.message || ikErr.help)
+          ? ikErr.message || ikErr.help
+          : "ImageKit rejected the upload with no error details - check IMAGEKIT_PRIVATE_KEY, IMAGEKIT_PUBLIC_KEY and IMAGEKIT_URL_ENDPOINT on Vercel."
+      );
+    }
     step(`ImageKit done: ${uploadResponse.url}`);
 
     // 3) Save both messages together only after everything succeeded
@@ -162,17 +177,20 @@ export const imageMessageController = async (req, res) => {
     // TEMP DEBUG: full detail is sent back in the response itself so it is
     // visible in the browser Network tab without needing Vercel log access.
     // Remove the "debug" field once the real cause is found.
+    // "stage" tells us the last step that STARTED, even if the error itself
+    // is empty/undefined (e.g. some SDKs reject() with no argument).
     return res.json({
       success: false,
       message:
         error?.response?.data?.message ||
         error?.message ||
-        "Image generation failed",
+        `Image generation failed at step: ${stage}`,
       debug: {
-        name: error?.name,
-        message: error?.message,
-        status: error?.status || error?.response?.status,
-        responseData: error?.response?.data,
+        stage,
+        name: error?.name ?? null,
+        message: error?.message ?? (error === undefined ? "undefined" : error === null ? "null" : String(error)),
+        status: error?.status || error?.response?.status || null,
+        responseData: error?.response?.data ?? null,
         stack: (error?.stack || "").split("\n").slice(0, 4),
       },
     });
